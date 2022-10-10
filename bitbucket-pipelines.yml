@@ -1,13 +1,3 @@
-# Template Terraform to deploy to Cloud Infrastructure
-
-# This template allows you to deploy your infrastructure using Terraform to supported cloud providers.
-# The workflow allows running tests, security scans on feature branches (as well as master).
-# After merging code to master the infrastructure will be deployed to cloud according to the given terraform template.
-
-# Prerequisites: credentials according to used cloud provider.
-# For advanced cases, please, follow terraform docs https://www.terraform.io/docs/index.html.
-
-
 image: hashicorp/terraform
 
 pipelines:
@@ -24,6 +14,18 @@ pipelines:
               # Run a security scan for sensitive data.
               # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
               - pipe: atlassian/git-secrets-scan:0.5.1
+        - step:
+              name: "Cx KICS"
+              script:
+                  - |
+                    apk add curl
+                    kics scan --cloud-provider aws --report-formats "junit" --exclude-severities info,low --ignore-on-exit results -p ${PWD} -o ${PWD}
+                    export token=$(curl -H "Content-Type: application/json" -X POST --data "{ \"client_id\": \"$client_id\",\"client_secret\": \"$client_secret\" }" https://xray.cloud.getxray.app/api/v1/authenticate| tr -d '"')
+                    curl -H "Content-Type: text/xml" -H "Authorization: Bearer $token" --data @junit-results.xml "https://xray.cloud.getxray.app/api/v1/import/execution/junit?projectKey=DD&revision=1.0"
+
+              artifacts:
+                  - results.json
+              image: checkmarx/kics:latest
   branches:
     main:
         - step:
@@ -33,6 +35,17 @@ pipelines:
               # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
               - pipe: atlassian/git-secrets-scan:0.5.1
         - step:
+              name: "Cx KICS"
+              script:
+                  - |
+                    apk add curl
+                    kics scan --cloud-provider aws --report-formats "junit" --output-path test-results --exclude-severities info,low --ignore-on-exit results -p ${PWD} -o ${PWD}
+                    export token=$(curl -H "Content-Type: application/json" -X POST --data "{ \"client_id\": \"$client_id\",\"client_secret\": \"$client_secret\" }" https://xray.cloud.getxray.app/api/v1/authenticate| tr -d '"')
+                    curl -H "Content-Type: text/xml" -H "Authorization: Bearer $token" --data @junit-results.xml "https://xray.cloud.getxray.app/api/v1/import/execution/junit?projectKey=DD&revision=$BITBUCKET_COMMIT&fixVersion=1.0"
+              artifacts:
+                  - junit-results.xml
+              image: checkmarx/kics:latest
+        - step:
             name: Deploy to Production
             deployment: Production
             trigger: manual
@@ -40,5 +53,4 @@ pipelines:
               - terraform init
               - terraform plan
               - terraform apply -auto-approve
-
 
