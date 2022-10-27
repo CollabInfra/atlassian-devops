@@ -1,0 +1,32 @@
+---
+
+atl_jvm_heap: "512m"
+
+atl_catalina_opts: ""
+atl_catalina_opts_extra: >-
+  -XX:+UseG1GC
+  -XX:+PrintAdaptiveSizePolicy
+  -Xloggc:{{ atl_product_installation_versioned }}/apache-tomcat/logs/`date +%F_%H-%M-%S`-gc.log
+  -XX:+PrintGCDetails
+  -XX:+PrintGCDateStamps
+  -XX:+PrintGCCause
+  -XX:+UseGCLogFileRotation
+  -XX:NumberOfGCLogFiles=10
+  -XX:GCLogFileSize=5M
+  -XX:+PrintTenuringDistribution
+  -Dfile.encoding=UTF-8
+
+atl_tomcat_acceptcount: "10"
+atl_tomcat_connectiontimeout: "20000"
+atl_tomcat_contextpath: ""
+atl_tomcat_enablelookups: "false"
+atl_tomcat_port: "8080"
+atl_tomcat_maxthreads: "200"
+atl_tomcat_minsparethreads: "10"
+atl_tomcat_mgmt_port: "8020"
+atl_tomcat_protocol: "HTTP/1.1"
+atl_tomcat_redirectport: "8443"
+atl_tomcat_scheme: "http"
+atl_tomcat_secure: "true"
+
+atl_proxy_port: "443"

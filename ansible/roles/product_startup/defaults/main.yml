@@ -1,0 +1,31 @@
+---
+
+# Mostly for molecule testing, as skip-tags doesn't work with handlers.
+atl_startup_enable: true
+atl_startup_restart: "{{ lookup('env', 'ATL_STARTUP_RESTART') | default(true, true) | bool }}"
+
+atl_startup_script_map:
+  jira: "bin/start-jira.sh"
+  confluence: "bin/start-confluence.sh"
+  stash: "bin/start-bitbucket.sh"
+  crowd: "start_crowd.sh"
+
+atl_stop_script_map:
+  jira: "bin/stop-jira.sh"
+  confluence: "bin/stop-confluence.sh"
+  stash: "bin/stop-bitbucket.sh"
+  crowd: "stop_crowd.sh"
+
+atl_startup_exec_path: "{{ atl_product_installation_current }}/{{ atl_startup_script_map[atl_product_family] }}"
+atl_startup_exec_options: ["-fg"]
+atl_startup_systemd_params: []
+atl_stop_exec_path: "{{ atl_product_installation_current }}/{{ atl_stop_script_map[atl_product_family] }}"
+
+atl_systemd_service_dir_map:
+  amazon: "/usr/lib/systemd/system"
+  ubuntu: "/lib/systemd/system"
+atl_systemd_service_dir: "{{ atl_systemd_service_dir_map[ansible_distribution | lower] }}"
+
+atl_systemd_service_name: "{{ atl_product_edition }}.service"
+
+atl_systemd_service_target: "multi-user.target"

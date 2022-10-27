@@ -1,0 +1,7 @@
+---
+
+- name: Install Ubuntu-specific NFS packages
+  apt:
+    name:
+      - nfs-kernel-server
+      - libnfs-utils

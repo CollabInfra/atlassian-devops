@@ -1,0 +1,7 @@
+---
+
+# FIXME: Add others as map?
+atl_synchrony_cluster_type: "aws"
+
+atl_synchrony_memory: "{{ lookup('env', 'ATL_SYNCHRONY_MEMORY') or '-Xmx2g' }}"
+atl_synchrony_stack_space: "{{ lookup('env', 'ATL_SYNCHRONY_STACK_SPACE') or '-Xss2048k' }}"

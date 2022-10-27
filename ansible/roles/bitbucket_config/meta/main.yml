@@ -1,0 +1,7 @@
+---
+
+galaxy_info:
+  namespace: dc_deployments_automation
+
+dependencies:
+  - role: bitbucket_common

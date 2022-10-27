@@ -1,0 +1,170 @@
+---
+
+- name: Create server config
+  template:
+    src: server.xml.j2
+    dest: "{{ atl_product_installation_versioned }}/apache-tomcat/conf/server.xml"
+
+- name: Set the minimum heap size (Xms)
+  lineinfile:
+    path: "{{ atl_product_installation_versioned }}/apache-tomcat/bin/setenv.sh"
+    regexp: '^(.*)Xms(\d+\w)(\s.*)$'
+    line: '\1Xms{{ atl_jvm_heap }}\3'
+    backrefs: yes
+
+- name: Set the maxmimum heap size (Xmx)
+  lineinfile:
+    path: "{{ atl_product_installation_versioned }}/apache-tomcat/bin/setenv.sh"
+    regexp: '^(.*)Xmx(\d+\w)(\s.*)$'
+    line: '\1Xmx{{ atl_jvm_heap }}\3'
+    backrefs: yes
+
+- name: Set Crowd home directory in crowd-init.properties file
+  lineinfile:
+    path: "{{ atl_product_installation_versioned }}/crowd-webapp/WEB-INF/classes/crowd-init.properties"
+    line: 'crowd.home={{ atl_product_home }}'
+
+- name: Export CATALINA_OPTS in setenv.sh
+  lineinfile:
+    path: '{{ atl_product_installation_versioned }}/apache-tomcat/bin/setenv.sh'
+    line: 'export CATALINA_OPTS'
+
+- name: CATALINA_OPTS to list
+  set_fact:
+    catalina_ops_list: "{{ catalina_ops_list | default([]) + (item | trim | regex_replace('^-')).split(' -') }}"
+  loop:
+    - '{{ atl_catalina_opts }}'
+    - '{{ atl_catalina_opts_extra }}'
+
+- name: CATALINA_OPTS unique and sorted
+  set_fact:
+    catalina_opts: "{{ query('flattened', catalina_ops_list) | reject('equalto', '') | unique | sort }}"
+
+- name: Set CATALINA_OPTS in setenv.sh
+  blockinfile:
+    block: "{{ lookup('template', 'templates/catalina_opts.j2') }}"
+    path: "{{ atl_product_installation_versioned }}/apache-tomcat/bin/setenv.sh"
+    insertbefore: "^export CATALINA_OPTS$"
+    marker: "# {mark} ANSIBLE MANAGED CATALINA_OPTS"
+
+- name: Set JAVA_HOME
+  lineinfile:
+    path: "{{ atl_product_installation_versioned }}/apache-tomcat/bin/setenv.sh"
+    insertafter: "EOF"
+    line: "export JAVA_HOME={{ atl_java_home }}"
+
+- name: Create application directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0750
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+  with_items:
+    - "{{ atl_product_home }}"
+    - "{{ atl_product_home_shared }}"
+    - "{{ atl_product_shared_plugins }}"
+  changed_when: false  # For Molecule idempotence check
+
+- name: Limit permissions on the installation directory
+  file:
+    path: "{{ atl_product_installation_versioned }}"
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+    mode: "u=rwX,g=rX,o=rX"
+    recurse: true
+  with_items:
+    - "{{ atl_installer_temp }}"
+    - "{{ atl_product_installation_versioned }}"
+    - "{{ atl_product_version_cache_dir }}"
+  changed_when: false  # For Molecule idempotence check
+
+- name: Grant access to the product working directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "u=rwX,g=rX,o-rwx"
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+    recurse: true
+  with_items:
+    - "{{ atl_product_installation_versioned }}/apache-tomcat/logs"
+    - "{{ atl_product_installation_versioned }}/apache-tomcat/temp"
+    - "{{ atl_product_installation_versioned }}/apache-tomcat/work"
+  changed_when: false  # For Molecule idempotence check
+
+- name: Create conf/Catalina directory owned by product so catalina.out logging works
+  file:
+    path: "{{ atl_product_installation_versioned }}/conf/Catalina"
+    state: directory
+    mode: "u=rwX,g=rX,o-rwx"
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+  changed_when: false  # For Molecule idempotence check
+
+- name: Symlink Crowd shared home directory
+  file:
+    src: "{{ atl_product_home_shared }}"
+    dest: "{{ atl_product_home }}/shared"
+    state: link
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+  changed_when: false  # For Molecule idempotence check
+
+- name: Assert baseurl to same as atl_proxy_name
+  community.postgresql.postgresql_query:
+    login_host: "{{ atl_db_host }}"
+    login_user: "{{ atl_jdbc_user }}"
+    login_password: "{{ atl_jdbc_password }}"
+    db: "{{ atl_jdbc_db_name }}"
+    query: >
+      update cwd_property set property_value=%s
+      where property_name = 'base.url'
+    positional_args:
+      - "{{ atl_tomcat_scheme }}://{{ atl_proxy_name }}{{ atl_tomcat_contextpath }}"
+  when:
+    - atl_proxy_name is defined
+    - atl_tomcat_scheme is defined
+    - db_created is undefined or not db_created.changed
+  tags:
+    - skip_on_stack_update
+  ignore_errors: yes  # For Molecule as it has no db test framework included
+
+- name: Check that crowd.cfg.xml exists
+  stat:
+    path: "{{ atl_product_home_shared }}/crowd.cfg.xml"
+  register: crowd_cfg_stat_result
+
+- block:
+  - name: Assert JDBC password to same as atl_jdbc_password
+    xml:
+      path: "{{ atl_product_home_shared }}/crowd.cfg.xml"
+      xpath: "/application-configuration/properties/property[@name='hibernate.connection.password']"
+      value: "{{ atl_jdbc_password }}"
+
+  - name: Assert JDBC url to same as atl_jdbc_url
+    xml:
+      path: "{{ atl_product_home_shared }}/crowd.cfg.xml"
+      xpath: "/application-configuration/properties/property[@name='hibernate.connection.url']"
+      value: "{{ atl_jdbc_url }}?reWriteBatchedInserts=true"
+
+  - name: Assert hibernate.c3p0.max_size to same as atl_db_poolmaxsize
+    xml:
+      path: "{{ atl_product_home_shared }}/crowd.cfg.xml"
+      xpath: "/application-configuration/properties/property[@name='hibernate.c3p0.max_size']"
+      value: "{{ atl_db_poolmaxsize }}"
+    when: atl_db_poolmaxsize is defined
+
+  - name: Assert hibernate.c3p0.min_size to same as atl_db_poolminsize
+    xml:
+      path: "{{ atl_product_home_shared }}/crowd.cfg.xml"
+      xpath: "/application-configuration/properties/property[@name='hibernate.c3p0.min_size']"
+      value: "{{ atl_db_poolminsize }}"
+    when: atl_db_poolminsize is defined
+
+  when: crowd_cfg_stat_result.stat.exists
+
+- name: Remove crowd.xml to prevent duplicates from appearing in cluster reporting
+  file:
+    path: "{{ atl_product_installation_versioned }}/apache-tomcat/conf/Catalina/localhost/crowd.xml"
+    state: absent

@@ -1,0 +1,77 @@
+- hosts: all
+  become: true
+
+  vars:
+    # See group_vars/aws_node_local.yml, which pull vars from the environment.
+    atl_product_family: "jira"
+    atl_product_user: "jira"
+    atl_product_edition: "jira-{{ lookup('env', 'ATL_PRODUCT_EDITION') | lower }}"
+    atl_product_version: "{{ lookup('env', 'ATL_PRODUCT_VERSION') }}"
+    atl_install_jsd_as_obr: "{{ lookup('env', 'ATL_JSD_ASOBR') | bool }}"
+    atl_systemd_service_name: "jira.service"
+
+    atl_use_system_jdk: true
+    java_major_version: "11"
+    atl_download_format: "installer"
+    atl_aws_enable_cloudwatch: true
+
+    atl_product_shared_home_map:
+      confluence: "confluence/shared-home"
+      jira: "jira/shared"
+      stash: "bitbucket/shared"
+      crowd: "crowd/shared"
+
+    atl_shared_mountpoint: "/opt/ansible/temporary"
+    atl_product_home_shared: "{{ atl_shared_mountpoint }}/{{ atl_product_shared_home_map[atl_product_family] }}"
+    atl_product_version_cache_dir: "{{ atl_product_home_shared }}"
+    atl_product_version_cache: "{{ atl_product_home_shared }}/{{ atl_product_edition }}.version"
+    atl_home_base: "/var/atlassian/application-data"
+    atl_installation_base: "/opt/atlassian"
+    atl_installer_temp: "{{ atl_installation_base }}/tmp"
+    atl_product_home: "{{ atl_home_base }}/{{ atl_product_family }}"
+    atl_product_installation_base: "{{ atl_installation_base }}/{{ atl_product_edition }}"
+    atl_product_installation_versioned: "{{ atl_product_installation_base }}/{{ atl_product_version }}"
+    atl_product_installation_current: "{{ atl_product_installation_base }}/current"
+
+    atl_startup_systemd_params:
+      - "LimitNOFILE=16384"
+
+    atl_jdbc_encoding: 'UNICODE'
+    atl_jdbc_collation: 'C'
+    atl_jdbc_ctype: 'C'
+    atl_jdbc_template: 'template0'
+
+    postgresql_major_version: "13"
+
+    datadog_api_key: "{{ lookup('env', 'DATADOG_API_KEY') }}"
+
+    datadog_checks:
+      process:
+        init_config:
+        instances:
+          - name: ssh
+            search_string: ['ssh', 'sshd']
+          - name: syslog
+            search_string: ['rsyslog']
+            cpu_check_interval: 0.2
+            exact_match: true
+            ignore_denied_access: true
+
+    datadog_config:
+      apm_config:
+        enabled: true
+      logs_enabled: true
+      tags:
+        - "env": "prod"
+        - "version": "{{ atl_product_version }}"
+        - "service": "{{ atl_product_user }}"
+
+    network_config:
+      enabled: true
+
+  roles:
+    - role: linux_common
+    - role: aws_common
+    - role: product_common
+    - role: product_install
+    - { role: datadog.datadog, become: true }

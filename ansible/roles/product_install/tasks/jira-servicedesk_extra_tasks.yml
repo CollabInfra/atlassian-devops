@@ -1,0 +1,5 @@
+---
+
+- name: Set the download edition for ServiceDesk
+  set_fact:
+    atl_download_edition: "servicedesk"

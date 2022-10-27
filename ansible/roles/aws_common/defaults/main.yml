@@ -1,0 +1,17 @@
+---
+
+# See https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/download-cloudwatch-agent-commandline.html
+aws_download_region: "{{ ansible_ec2_placement_region | default('us-west-2') }}"
+aws_cloudwatch_agent_rpm: "https://s3.{{ aws_download_region }}.amazonaws.com/amazoncloudwatch-agent-{{ aws_download_region }}/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm"
+
+atl_aws_enable_cloudwatch: false
+atl_aws_enable_cloudwatch_logs: false
+
+# Mostly for molecule testing, as skip-tags doesn't work with handlers.
+atl_aws_agent_restart: true
+
+atl_aws_log_group_base: "{{ atl_product_edition }}-{{ atl_aws_stack_name }}"
+atl_aws_log_groups:
+  product: "{{ atl_aws_log_group_base }}"
+  audit: "{{ atl_aws_log_group_base }}-audit"
+  provisioning: "{{ atl_aws_log_group_base }}-provisioning"

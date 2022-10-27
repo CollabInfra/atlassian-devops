@@ -1,0 +1,20 @@
+---
+
+- name: Create installer varfile
+  template:
+    src: "{{ atl_product_family }}.varfile.j2"
+    dest: "{{ atl_product_varfile }}"
+    mode: 0755
+
+# NOTE: We run the installer as the user rather than root to limit its
+# actions. For example, if root and the 'jira' user exists then it
+# will create 'jira1'; this potentially creates idempotency/upgrade
+# issues down the line.
+# The variable {{ atl_product_download }} will be on temp for first nodes and shared_home for
+# subsequent nodes.
+- name: Run the installer
+  command: /bin/sh "{{ atl_product_download }}" -q -varfile "{{ atl_product_varfile }}"
+  args:
+    creates: "{{ atl_product_installation_versioned }}/.install4j/"
+  become: true
+  become_user: "{{ atl_product_user }}"

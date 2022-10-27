@@ -1,0 +1,8 @@
+---
+
+- name: Install common Ubuntu support packages
+  apt:
+    name:
+      - libxml2-utils
+      - git
+      - fontconfig

@@ -1,0 +1,33 @@
+[Unit]
+Description=Atlassian {{ atl_product_edition }}
+After=network-online.target
+
+[Service]
+{% if (atl_product_family == "stash") %}
+Type=forking
+{% endif %}
+User={{ atl_product_user }}
+Group={{ atl_product_user }}
+StandardOutput=journal+console
+StandardError=journal+console
+
+{% for p in atl_startup_systemd_params -%}
+  {{ p }}
+{% endfor %}
+
+{# Bitbucket DC sets up its service start/stop logging in a different way to all our other DC offerings and so we exclude it from having the catalina.out redirect and foreground startup #}
+{% if (atl_product_family == "stash") %}
+PIDFile={{ atl_product_home }}/log/bitbucket.pid
+ExecStart={{ atl_startup_exec_path }}{% for c in atl_startup_exec_options %} {{ c }}{% endfor %}
+
+ExecStop={{ atl_stop_exec_path }}
+{% else %}
+ExecStart={{ atl_startup_exec_path }}{% for c in atl_startup_exec_options %} {{ c }}{% endfor %} >{{ atl_product_installation_current }}/logs/catalina.out 2>&1
+{% endif %}
+
+Restart=on-failure
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy={{ atl_systemd_service_target }}

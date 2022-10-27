@@ -1,0 +1,48 @@
+---
+
+atl_jvm_heap: "2048m"
+atl_fonts_fallback_dirs:
+  - "{{ atl_java_home }}/lib/fonts/fallback/"
+
+atl_autologin_cookie_age: "{{ lookup('env', 'ATL_AUTOLOGIN_COOKIE_AGE') }}"
+
+atl_db_timeout: "{{ lookup('env', 'ATL_DB_TIMEOUT') or '30' }}"
+atl_db_idletestperiod: "{{ lookup('env', 'ATL_DB_IDLETESTPERIOD') or '100' }}"
+atl_db_maxstatements: "{{ lookup('env', 'ATL_DB_MAXSTATEMENTS') or '0' }}"
+atl_db_validate: "{{ lookup('env', 'ATL_DB_VALIDATE') or 'false' }}"
+atl_db_acquireincrement: "{{ lookup('env', 'ATL_DB_ACQUIREINCREMENT') or '1' }}"
+atl_db_preferredtestquery: "{{ lookup('env', 'ATL_DB_PREFERREDTESTQUERY') or 'select version();' }}"
+
+atl_hazelcast_network_aws_tag_key: "{{ lookup('env', 'ATL_HAZELCAST_NETWORK_AWS_TAG_KEY') or 'Cluster' }}"
+atl_hazelcast_network_aws_host_header: "ec2.amazonaws.com"
+atl_hazelcast_network_aws_iam_region: "{{ lookup('env', 'ATL_HAZELCAST_NETWORK_AWS_IAM_REGION') }}"
+atl_hazelcast_network_aws_iam_role: "{{ lookup('env', 'ATL_HAZELCAST_NETWORK_AWS_IAM_ROLE') }}"
+atl_hazelcast_network_aws_tag_value: "{{ lookup('env', 'ATL_HAZELCAST_NETWORK_AWS_TAG_VALUE') }}"
+
+atl_catalina_opts: ""
+atl_catalina_opts_extra: >-
+  -Datlassian.event.thread_pool_configuration.queue_size=4096
+  -Datlassian.plugins.enable.wait=300
+  -Dconfluence.upgrade.recovery.file.enabled=false
+  -Dfile.encoding=UTF-8
+  -Djava.net.preferIPv4Stack=true
+  -Dshare.group.email.mapping=atlassian-all:atlassian-all@atlassian.com,atlassian-staff:atlassian-staff@atlassian.com
+  -XX:+PrintAdaptiveSizePolicy
+  -XX:+PrintGCDetails
+  -XX:+PrintTenuringDistribution
+  -Dsynchrony.proxy.enabled=false
+  -Dconfluence.cluster.node.name={{ atl_local_ipv4 }}
+  -Dconfluence.cluster.hazelcast.max.no.heartbeat.seconds=60
+  {% if atl_synchrony_service_url | string | length %}-Dsynchrony.service.url={{ atl_synchrony_service_url }}{% endif %}
+
+atl_tomcat_port: "8080"
+atl_tomcat_mgmt_port: "8005"
+atl_tomcat_acceptcount: "10"
+atl_tomcat_connectiontimeout: "20000"
+atl_tomcat_contextpath: ""
+atl_tomcat_maxthreads: "200"
+atl_tomcat_minsparethreads: "10"
+atl_tomcat_protocol: "HTTP/1.1"
+atl_tomcat_redirectport: ""
+atl_tomcat_scheme: "http"
+atl_tomcat_secure: "false"

@@ -19,5 +19,15 @@ terraform {
 # Configure the AWS Provider
 provider "aws" {
   region = "ca-central-1"
+  default_tags {
+    tags = {
+      Environment = "prod"
+      Service     = "jira"
+      Version     = "9.2.0"
+    }
+  }
 }
 
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}

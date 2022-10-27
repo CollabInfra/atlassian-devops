@@ -1,0 +1,95 @@
+#cloud-config
+# vim: syntax=yaml
+runcmd:
+  - [ansible-playbook, /etc/ansible/jira-cd.yml]
+write_files:
+- encoding: b64
+  owner: root:root
+  path: /etc/ansible/jira-cd.yml
+  permissions: '0640'
+  content: |
+    - hosts: localhost
+      become: true
+
+      vars:
+          atl_efs_id: ${efs_id}
+          atl_jdbc_user: ${jdbc_user}
+          atl_db_root_password: ${db_master_passwd}
+          atl_db_root_user: ${db_master_user}
+          atl_db_root_db_name: ${db_name}
+          atl_jdbc_db_name: ${db_name}
+          atl_jdbc_password: ${jdbc_passwd}
+          atl_db_engine: "aurora_postgres"
+          atl_db_engine_to_db_type_map:
+          aurora_postgres: "postgresaurora96"
+          rds_postgres: "postgres72"
+          atl_db_type: "{{ atl_db_engine_to_db_type_map[atl_db_engine] | default('postgres72') }}"
+          atl_db_host: ${db_host}
+          atl_db_port: ${db_port}
+          atl_jdbc_url: "jdbc:postgresql://{{ atl_db_host }}:{{ atl_db_port }}/{{ atl_jdbc_db_name }}{{ atl_jdbc_query_params_for_engine[atl_db_engine] | default('') }}"
+          atl_db_driver: "{{ lookup('env', 'ATL_DB_DRIVER') or 'org.postgresql.Driver' }}"
+          atl_product_version: ${atl_product_version}
+          atl_tomcat_acceptcount: "{{ lookup('env', 'ATL_TOMCAT_ACCEPTCOUNT') or '10' }}"
+          atl_tomcat_connectiontimeout: "{{ lookup('env', 'ATL_TOMCAT_CONNECTIONTIMEOUT') or '20000' }}"
+          atl_tomcat_contextpath: "{{ lookup('env', 'ATL_TOMCAT_CONTEXTPATH') or '' }}"
+          atl_tomcat_enablelookups: "{{ lookup('env', 'ATL_TOMCAT_ENABLELOOKUPS') or 'false' }}"
+          atl_tomcat_maxthreads: "{{ lookup('env', 'ATL_TOMCAT_MAXTHREADS') or '200' }}"
+          atl_tomcat_minsparethreads: "{{ lookup('env', 'ATL_TOMCAT_MINSPARETHREADS') or '10' }}"
+          atl_tomcat_protocol: "{{ lookup('env', 'ATL_TOMCAT_PROTOCOL') or 'HTTP/1.1' }}"
+          atl_tomcat_redirectport: "{{ lookup('env', 'ATL_TOMCAT_REDIRECTPORT') or '' }}"
+          atl_tomcat_scheme: "{{ lookup('env', 'ATL_TOMCAT_SCHEME') or 'http' }}"
+          atl_tomcat_secure: "{{ lookup('env', 'ATL_TOMCAT_SECURE') or 'false' }}"
+          atl_jvm_heap: "{{ lookup('env', 'ATL_JVM_HEAP') or '2048m' }}"
+          atl_jvm_opts: "{{ lookup('env', 'ATL_JVM_OPTS') or '' }}"
+          atl_catalina_opts: "{{ lookup('env', 'ATL_CATALINA_OPTS') or '' }}"
+          atl_proxy_name: "{{ lookup('env', 'ATL_PROXY_NAME') | lower }}"
+          atl_proxy_port: "{{ lookup('env', 'ATL_TOMCAT_PROXYPORT') }}"
+          atl_tomcat_port: "{{ lookup('env', 'ATL_TOMCAT_DEFAULTCONNECTORPORT') or '8080' }}"
+          atl_ssl_proxy: "{{ lookup('env', 'ATL_SSL_PROXY') or 'false' }}"
+          atl_apptunnel_port: "{{ lookup('env', 'ATL_APPTUNNEL_PORT') or '' }}"
+          atl_product_shared_plugins: "{{ atl_product_home_shared }}/plugins/installed-plugins"
+
+          # See group_vars/aws_node_local.yml, which pull vars from the environment.
+          atl_product_family: "jira"
+          atl_product_user: "jira"
+          atl_product_edition: "jira-software"
+          atl_install_jsd_as_obr: "{{ lookup('env', 'ATL_JSD_ASOBR') | bool }}"
+          atl_systemd_service_name: "jira.service"
+
+          atl_use_system_jdk: true
+          java_major_version: "11"
+          atl_download_format: "installer"
+          atl_aws_enable_cloudwatch: true
+
+          atl_product_shared_home_map:
+          confluence: "confluence/shared-home"
+          jira: "jira/shared"
+          stash: "bitbucket/shared"
+          crowd: "crowd/shared"
+
+          atl_shared_mountpoint: "/media/atl"
+          atl_product_home_shared: "{{ atl_shared_mountpoint }}/{{ atl_product_shared_home_map[atl_product_family] }}"
+          atl_product_version_cache_dir: "{{ atl_product_home_shared }}"
+          atl_product_version_cache: "{{ atl_product_home_shared }}/{{ atl_product_edition }}.version"
+          atl_home_base: "/var/atlassian/application-data"
+          atl_installation_base: "/opt/atlassian"
+          atl_installer_temp: "{{ atl_installation_base }}/tmp"
+          atl_product_home: "{{ atl_home_base }}/{{ atl_product_family }}"
+          atl_product_installation_base: "{{ atl_installation_base }}/{{ atl_product_edition }}"
+          atl_product_installation_versioned: "{{ atl_product_installation_base }}/{{ atl_product_version }}"
+          atl_product_installation_current: "{{ atl_product_installation_base }}/current"
+
+          atl_startup_systemd_params:
+          - "LimitNOFILE=16384"
+
+          atl_jdbc_encoding: 'UNICODE'
+          atl_jdbc_collation: 'C'
+          atl_jdbc_ctype: 'C'
+          atl_jdbc_template: 'template0'
+
+      roles:
+          - role: aws_shared_fs_config
+          - role: database_init
+          - role: jira_config
+          - role: product_common
+          - role: product_startup

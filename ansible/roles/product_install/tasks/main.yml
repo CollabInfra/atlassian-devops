@@ -1,0 +1,278 @@
+---
+
+
+- name: Check for existing version cache file
+  stat:
+    path: "{{ atl_product_version_cache }}"
+  register: cached
+
+# Case: File exists, always use its value
+- name: Use version for product version
+  block:
+
+    - name: Read cached version from file
+      command: "cat {{ atl_product_version_cache }}"
+      register: atl_product_version_file
+      changed_when: false
+
+    - name: Set the local var to cached version
+      set_fact:
+        atl_cached_version: "{{ atl_product_version_file.stdout }}"
+
+  when: cached.stat.exists
+
+
+- name: Determine if requested version is 'latest'
+  set_fact:
+    version_is_latest: "{{ atl_product_version is undefined or
+                           not atl_product_version or
+                           atl_product_version == 'latest' }}"
+
+# Case: File doesn't exist and no version has been set; find latest.
+- name: Fetch and cache latest version when no override
+  block:
+
+    - name: Fetch the latest edition version
+      include_tasks: "{{ atl_product_edition }}_version_latest.yml"
+
+  when: not cached.stat.exists and version_is_latest | bool
+
+
+######################################################################
+# Version logic:
+#
+# At this point we have 3 values (possibly empty):
+#
+# * atl_product_version (supplied)
+# * atl_cached_version
+# * atl_latest_version
+#
+# If no cached value, use the supplied value or 'latest' if unset.
+#
+# If a cached file exists, and the requested version is 'latest' (or
+# unset), cache wins.
+#
+# If a version is set, then it is honoured _if_ it is higher than the
+# cached value (i.e. upgrade path).
+#
+# there is some test logic hack to allow atlassian specfic versioning
+# requirements to work as expected ie - (7.2.0 to upgrade over 7.2.0-rc1) and
+# (7.2.0-beta1 to upgrade over 7.2.0-m01) in "version is not latest"
+
+- name: "Case: Version is latest"
+  block:
+
+    - name: "Case: Cached version exists, has precedence over 'latest'"
+      set_fact:
+        atl_download_version: "{{ atl_cached_version }}"
+      when: cached.stat.exists
+
+    - name: "Case: No cached version, use latest"
+      set_fact:
+        atl_download_version: "{{ atl_latest_version }}"
+      when: not cached.stat.exists
+
+  when: version_is_latest | bool
+
+- name: "Case: Version is not latest"
+  block:
+    - name: "create atlassian z versioning for comparison"
+      set_fact:
+        atl_z_product_version: "{{ atl_product_version ~ '-z' }}"
+        atl_z_cached_version: "{{ atl_cached_version ~ '-z' }}"
+
+    - name: "create atlassian ordered versioning for comparison"
+      set_fact:
+        atl_product_normalised_version: "{{ atl_z_product_version | replace('-m', '-am') }}"
+        atl_cached_normalised_version: "{{ atl_z_cached_version | replace('-m', '-am') }}"
+
+    - name: "Case: No cached version, or supplied is higher; use supplied"
+      set_fact:
+        atl_download_version: "{{ atl_product_version }}"
+      when: force_version_update | bool or
+            not cached.stat.exists or
+            atl_product_normalised_version is version(atl_cached_normalised_version, '>')
+
+    - name: "Case: Cached version is higher or forced, ignore supplied"
+      set_fact:
+        atl_download_version: "{{ atl_cached_version }}"
+      when: cached.stat.exists and
+            atl_product_normalised_version is version(atl_cached_normalised_version, '<=') and
+            not force_version_update | bool
+
+  when: not version_is_latest | bool
+
+
+- name: "Fallthrough guard: Use cached or supplied version if nothing set"
+  set_fact:
+    atl_download_version: "{{ atl_cached_version or atl_product_version }}"
+  when: atl_download_version is not defined or
+        atl_download_version | length == 0
+
+- name: Override the supplied version with the calculated one
+  set_fact:
+    atl_product_version: "{{ atl_download_version }}"
+
+######################################################################
+
+- name: Perform any additional per-edition version setup
+  include_tasks: "{{ atl_product_edition }}_extra_tasks.yml"
+
+- name: Create installation directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0750
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+  with_items:
+    - "{{ atl_installer_temp }}"
+    - "{{ atl_product_installation_versioned }}"
+    - "{{ atl_product_version_cache_dir }}"
+    - "{{ atl_product_home }}"
+  changed_when: false  # For Molecule idempotence check
+
+# At this point atl_product_version should be set, cache if necessary.
+- name: Write override cached version when specified
+  template:
+    src: version.j2
+    dest: "{{ atl_product_version_cache }}"
+    force: true
+
+# For the first run a temp binary should be downloaded but moved to
+# shared home to ensure all subsequent nodes have access
+# to the same specific version binary.
+# To prevent a race condition with multiple downloads at the same time
+# a directory is used as a lockfile (atomic operation) when moving binary.
+
+- name: Set assumptions to avoid race condition
+  set_fact:
+    download_binary: true
+    move_binary: false
+    atl_product_download: "{{ atl_product_temp_download }}"
+
+# Check for pre-downloaded binary on shared_home and completed lock dir.
+- name: Check for completed lock directory
+  stat:
+    path: "{{ atl_product_home_shared_completed_lock }}"
+  register: completed_lock
+
+- name: Check for product installer in home_shared
+  stat:
+    path: "{{ atl_product_home_shared_download }}"
+  register: home_shared_download
+
+# If binary exists and lockdir exists use this binary instead
+- name: Check lock directory and binary exists on shared_home
+  set_fact:
+    download_binary: false
+    atl_product_download: "{{ atl_product_home_shared_download }}"
+  when:
+    - home_shared_download.stat.exists
+    - completed_lock.stat.isdir is defined
+    - completed_lock.stat.isdir
+
+# Fetch binary if required
+- name: download_binary is true so fetch and do all the things
+  block:
+
+    # Fetch binary and copy to temp
+    - name: Fetch binary
+      get_url:
+        url: "{{ atl_product_download_url }}"
+        dest: "{{ atl_product_temp_download }}"
+        mode: 0755
+        force: false
+      register: atl_product_completed
+
+    # If product installer was fetched make the lock directory
+    - name: Create moving_lock.
+      file:
+        path: "{{ atl_product_home_shared_moving_lock }}"
+        state: directory
+      when:
+        - atl_product_completed is succeeded
+      register: moving_lock_created
+
+    # Directory lock was created by this run?
+    # If so, then set a fact intending to move binary
+    - name: Move binary Scenario - lock created by this run
+      set_fact:
+        move_binary: true
+      when:
+        - moving_lock_created is succeeded
+        - moving_lock_created.changed
+        # Otherwise directory lock was either already created or
+        # could not be created. Fall back is to continue and install from temp
+
+  when: download_binary | bool
+
+# If the intention is to move binary to home_shared
+- name: Move product installer to home_shared
+  block:
+
+    - name: Copy temp installer to home_shared
+      copy:
+        src: "{{ atl_product_temp_download }}"
+        dest: "{{ atl_product_home_shared_download }}"
+        remote_src: true
+      when:
+        - moving_lock_created is succeeded
+        - moving_lock_created.changed
+      register: copied
+
+    - name: Create completed_lock once product installer downloaded and copied
+      file:
+        path: "{{ atl_product_home_shared_completed_lock }}"
+        state: directory
+      when: copied is succeeded
+      register: completed_lock_created
+
+    - name: Remove moving_lock to show that binary is completed
+      file:
+        path: "{{ atl_product_home_shared_moving_lock }}"
+        state: absent
+      when:
+        - completed_lock_created is succeeded
+        - copied is succeeded
+      register: moving_lock_removed
+
+    - name: Delete old temp installer
+      file:
+        path: "{{ atl_product_temp_download }}"
+        state: absent
+      when: moving_lock_removed is succeeded
+      register: temp_deleted
+
+    - name: Set install to home_shared location
+      set_fact:
+        atl_product_download: "{{ atl_product_home_shared_download }}"
+      when: temp_deleted is succeeded
+
+  when: move_binary | bool
+
+# At this point the binary is in {{ atl_product_download }}
+# (which is either on home_shared or temp)
+- name: Unpack the downloaded application depending on format
+  include_tasks: "unpack_{{ atl_download_format }}.yml"
+
+- name: Symlink the installed version to current
+  file:
+    src: "{{ atl_product_installation_versioned }}"
+    dest: "{{ atl_product_installation_current }}"
+    state: link
+    force: true
+
+- name: "Ensure catalina.out log dir exists after product is installed (except bitbucket)"
+  file:
+    path: "{{ atl_product_installation_current }}/logs"
+    state: directory
+    mode: 0750
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+  when: atl_product_family != "stash"
+  changed_when: false  # For Molecule idempotence check
+
+- name: Include if jsd is requested to be installed from OBR
+  include_tasks: "jira-servicedesk_as_obr.yml"
+  when: atl_install_jsd_as_obr | bool

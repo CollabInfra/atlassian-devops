@@ -1,0 +1,15 @@
+---
+
+- name: Unpack the product packages
+  unarchive:
+    remote_src: true
+    src: "{{ atl_product_download }}"
+    dest: "{{ atl_product_installation_versioned }}"
+    owner: "{{ atl_product_user }}"
+    group: "{{ atl_product_user }}"
+    mode: 0755
+    # Strip off the lead product/version specific directory to normalise naming
+    extra_opts:
+      - "--strip-components=1"
+    # NOTE: Currently all products contain a `README.txt`, so use that as an 'unpacked' marker.
+    creates: "{{ atl_product_installation_versioned }}/README.txt"

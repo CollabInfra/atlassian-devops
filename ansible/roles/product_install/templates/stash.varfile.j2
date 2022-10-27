@@ -1,0 +1,10 @@
+app.install.service$Boolean=false
+app.service.account={{ atl_product_user }}
+portChoice=defaults
+app.bitbucketHome={{ atl_product_home }}
+app.defaultInstallDir={{ atl_product_installation_versioned }}
+launch.application$Boolean=false
+executeLauncherAction$Boolean=false
+elasticsearch.install.service$Boolean={{ atl_bitbucket_bundled_elasticsearch_enabled | default('false') }}
+confirm.disable.plugins$Boolean=true
+container.configuration.ignore$Boolean=true

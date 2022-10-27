@@ -1,0 +1,43 @@
+---
+
+# Empty values to simplify logic (no undefineds)
+atl_latest_version: ''
+atl_cached_version: ''
+
+atl_product_latest_version_url: "https://marketplace.atlassian.com/rest/2/products/key/{{ atl_product_family }}/versions"
+atl_product_version_cache_dir: "{{ atl_product_home_shared }}"
+atl_product_version_cache: "{{ atl_product_home_shared }}/{{ atl_product_edition }}.version"
+
+atl_download_format: 'installer'
+atl_download_format_suffix_map:
+  installer: '-x64.bin'
+  tarball: '.tar.gz'
+atl_download_suffix: "{{ atl_download_format_suffix_map[atl_download_format] }}"
+
+atl_release_base_url: "https://product-downloads.atlassian.com/software"
+atl_product_base_url: "{{ atl_release_base_url }}/{{ atl_product_family }}/downloads"
+atl_product_download_url: "{{ atl_product_base_url }}/atlassian-{{ atl_download_edition | default(atl_product_edition) }}-{{ atl_product_version }}{{ atl_download_suffix }}"
+
+atl_product_download_filename: "{{ atl_download_edition | default(atl_product_edition) }}.{{ atl_product_version }}{{ atl_download_suffix }}"
+atl_product_temp_download: "{{ atl_installer_temp }}/{{ atl_product_download_filename }}"
+atl_product_varfile: "{{ atl_installer_temp }}/{{ atl_product_family }}.varfile"
+
+atl_product_home_shared_download_dir: "{{ atl_shared_mountpoint }}/downloads"
+atl_product_home_shared_download: "{{ atl_product_home_shared_download_dir }}/{{ atl_product_download_filename }}"
+atl_product_home_shared_moving_lock: "{{ atl_product_home_shared_download }}_moving"
+atl_product_home_shared_completed_lock: "{{ atl_product_home_shared_download }}_completed"
+
+atl_marketplace_base: "https://marketplace.atlassian.com"
+atl_mpac_products: "https://marketplace.atlassian.com/rest/2/products"
+atl_servicedesk_latest_url: "https://marketplace.atlassian.com/rest/2/products/key/jira-servicedesk/versions/latest"
+atl_servicedesk_versioned_url: "https://marketplace.atlassian.com/rest/2/products/key/jira-servicedesk/versions/name/{{ atl_product_version }}"
+atl_servicedesk_url_map:
+  latest: "{{ atl_servicedesk_latest_url }}"
+  default: "{{ atl_servicedesk_versioned_url }}"
+atl_servicedesk_metadata_url: "{{ atl_servicedesk_url_map[atl_product_version] | default(atl_servicedesk_url_map['default']) }}"
+
+atl_install_jsd_as_obr: false
+atl_source_obr_from_marketplace: true
+atl_servicedesk_download_file: "{{ atl_installer_temp }}/jira-servicedesk.{{ atl_product_version }}.obr"
+
+force_version_update: false

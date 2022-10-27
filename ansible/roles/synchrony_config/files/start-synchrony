@@ -1,0 +1,65 @@
+#!/bin/bash
+
+set -e
+
+# Synchrony startup wrapper for systemd. Note: This expects the
+# environment to be setup, usually by sourceing /etc/atl and
+# /etc/atl.synchrony with EnvironmentFile. See the rest of this role
+# for details. The rest of the variables below need to be calculated
+# at runtime.
+
+# Find the first Postgres driver in lib folder
+SYNCHRONY_JWT_PRIVATE_KEY=""
+SYNCHRONY_JWT_PUBLIC_KEY=""
+
+ATL_POSTGRES_DRIVER_PATH=$(ls -t ${ATL_CONFLUENCE_INSTALL_DIR}/confluence/WEB-INF/lib/postgresql*.jar | head -n 1)
+SYNCHRONY_CLASSPATH="${ATL_SYNCHRONY_JAR_PATH}:${ATL_POSTGRES_DRIVER_PATH}"
+
+
+# To support retries these commands won't fail the script by virtue of using `--shell` option for xmllint.
+function extractJWTKeyFromConfluenceConfig {
+    local keyType=$1
+    if [[ "${keyType}" != "jwt.private.key" && "${keyType}" != "jwt.public.key" ]]; then
+        echo "Unexpected value for keyType - ${keyType} to extract JWT key from confluence.cfg.xml"
+        exit 1
+    fi
+    echo "cat //properties/property[@name='${keyType}']/text()" | xmllint --nocdata --shell ${ATL_CONFLUENCE_SHARED_CONFIG_FILE} | sed '1d;$d'
+}
+
+# Synchrony requires JWT keys to communicate with Confluence application. These keys are written to the config file
+# after admin will go through the setup and provide license. This function waits for the keys being available in the
+# config file.
+function waitForConfluenceConfigInSharedHome() {
+    echo "=== BEGIN: Waiting for confluence.cfg.xml available in shared home folder ==="
+    while [[ ! -f ${ATL_CONFLUENCE_SHARED_CONFIG_FILE} ]]; do
+	sleep ${ATL_SYNCHRONY_WAITING_CONFIG_TIME}
+	echo "====== :   Keep waiting for ${ATL_SYNCHRONY_WAITING_CONFIG_TIME} seconds ======"
+    done
+
+    echo "====== : Fetching JWT keys from Confluence config... ======"
+    while [[ -z ${SYNCHRONY_JWT_PRIVATE_KEY} || -z ${SYNCHRONY_JWT_PUBLIC_KEY} ]]; do
+        SYNCHRONY_JWT_PRIVATE_KEY=$(extractJWTKeyFromConfluenceConfig 'jwt.private.key') 2>&1
+        SYNCHRONY_JWT_PUBLIC_KEY=$(extractJWTKeyFromConfluenceConfig 'jwt.public.key') 2>&1
+        if [[ -z ${SYNCHRONY_JWT_PRIVATE_KEY} || -z ${SYNCHRONY_JWT_PUBLIC_KEY} ]]; then
+	    echo "====== :   Could not load value for JWT key; will wait for next ${ATL_SYNCHRONY_WAITING_CONFIG_TIME} seconds before reload ======"
+	    sleep ${ATL_SYNCHRONY_WAITING_CONFIG_TIME}
+        fi
+    done
+
+    echo "=== END: Waiting for confluence.cfg.xml available in shared home folder ==="
+}
+
+
+######################################################################
+# Start Synchrony service
+
+waitForConfluenceConfigInSharedHome
+
+# Additional settings are in /etc/atl.synchrony
+export SYNCHRONY_JWT_PRIVATE_KEY
+export SYNCHRONY_JWT_PUBLIC_KEY
+
+exec ${_RUNJAVA} \
+     -classpath ${SYNCHRONY_CLASSPATH} \
+     ${ATL_SYNCHRONY_JVM_PROPERTIES} \
+     synchrony.core sql

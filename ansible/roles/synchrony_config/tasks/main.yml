@@ -1,0 +1,15 @@
+---
+
+- name: Install the startup wrapper script
+  copy:
+    src: start-synchrony
+    dest: "{{ atl_product_installation_current }}/bin/start-synchrony"
+    group: "{{ atl_product_user }}"
+    mode: "0750"
+
+- name: Install the Synchrony environment settings
+  template:
+    src: "atl.synchrony.j2"
+    dest: "/etc/atl.synchrony"
+    group: "{{ atl_product_user }}"
+    mode: "0640"
