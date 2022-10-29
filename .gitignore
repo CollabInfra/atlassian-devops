@@ -51,3 +51,6 @@ Thumbs.db
 # Terraform
 .terraform/
 .terraform.lock.hcl
+
+# Kics
+results.json
